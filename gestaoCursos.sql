@@ -1,4 +1,4 @@
-/*
+
 CREATE DATABASE IF NOT EXISTS gestao_academica;
 USE gestao_academica;
 
@@ -7,7 +7,9 @@ CREATE TABLE usuario (
     nome VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     senha VARCHAR(255) NOT NULL,
-    tipo ENUM('admin', 'professor', 'aluno') NOT NULL,
+    is_professor BOOLEAN DEFAULT FALSE,
+    is_aluno BOOLEAN DEFAULT FALSE,
+    is_admin BOOLEAN DEFAULT FALSE,
     data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ativo BOOLEAN DEFAULT TRUE
 );
@@ -24,7 +26,6 @@ CREATE TABLE professor (
     especialidade VARCHAR(100),
     data_contratacao DATE NOT NULL,
     formacao VARCHAR(100),
-    registro VARCHAR(20) UNIQUE NOT NULL,
     regime_trabalho ENUM('integral', 'parcial', 'horista') DEFAULT 'integral',
     FOREIGN KEY (id_professor) REFERENCES usuario(id_usuario) ON DELETE CASCADE
 );
@@ -33,7 +34,7 @@ CREATE TABLE aluno (
     id_aluno INT PRIMARY KEY,
     data_ingresso DATE NOT NULL,
     status ENUM('ativo', 'inativo', 'trancado', 'formado') DEFAULT 'ativo',
-    registro VARCHAR(20) UNIQUE NOT NULL, 
+    registro VARCHAR(8) NOT NULL,
     FOREIGN KEY (id_aluno) REFERENCES usuario(id_usuario) ON DELETE CASCADE
 );
 
@@ -55,7 +56,8 @@ CREATE TABLE curso (
     ativo BOOLEAN DEFAULT TRUE,
     data_criacao DATE NOT NULL DEFAULT (CURRENT_DATE)
 );
-*/
+
+ALTER TABLE curso ADD FOREIGN KEY (coordenador_id) REFERENCES professor(id_professor);
 
 CREATE TABLE turma (
     id_turma INT AUTO_INCREMENT PRIMARY KEY,
@@ -72,9 +74,6 @@ CREATE TABLE turma (
     data_termino DATE
 );
 
-ALTER TABLE curso ADD FOREIGN KEY (coordenador_id) REFERENCES professor(id_professor);
-
--- ver se isso resolve o erro por ALTER TABLE
 ALTER TABLE turma ADD FOREIGN KEY (id_curso) REFERENCES curso(id_curso);
 
 ALTER TABLE turma ADD FOREIGN KEY (id_professor) REFERENCES professor(id_professor);
@@ -87,8 +86,7 @@ CREATE TABLE matricula (
     id_turma INT NOT NULL,
     data_matricula TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status ENUM('matriculado', 'trancado', 'cancelado', 'aprovado', 'reprovado') DEFAULT 'matriculado',
-    nota_final DECIMAL(4,2), 
-    frequencia DECIMAL(5,2) DEFAULT 0
+    nota_final DECIMAL(4,2)
 );
 
 ALTER TABLE matricula ADD UNIQUE KEY unique_aluno_turma (id_aluno, id_turma);
@@ -156,24 +154,6 @@ ALTER TABLE grade_curricular ADD FOREIGN KEY (id_curso) REFERENCES curso(id_curs
 
 ALTER TABLE grade_curricular ADD FOREIGN KEY (id_disciplina) REFERENCES disciplina(id_disciplina) ON DELETE CASCADE;
 
-CREATE TABLE frequencia (
-    id_frequencia INT AUTO_INCREMENT PRIMARY KEY,
-    id_aluno INT NOT NULL,
-    id_turma INT NOT NULL,
-    data_aula DATE NOT NULL,
-    presente BOOLEAN DEFAULT FALSE,
-    observacao TEXT
-);
-
-ALTER TABLE frequencia ADD UNIQUE KEY unique_aluno_turma_data (id_aluno, id_turma, data_aula);
-
-ALTER TABLE frequencia ADD FOREIGN KEY (id_aluno) REFERENCES aluno(id_aluno) ON DELETE CASCADE;
-
-ALTER TABLE frequencia ADD FOREIGN KEY (id_turma) REFERENCES turma(id_turma) ON DELETE CASCADE;
-
--- Adicionar coluna para controle de vagas e prioridade
-ALTER TABLE matricula ADD COLUMN prioridade ENUM('normal', 'reprovado') DEFAULT 'normal';
-
 -- solicitações de vagas caso a turma esteja cheia
 CREATE TABLE solicitacao_vagas (
     id_solicitacao INT AUTO_INCREMENT PRIMARY KEY,
@@ -181,10 +161,12 @@ CREATE TABLE solicitacao_vagas (
     id_turma INT NOT NULL,
     mensagem TEXT,
     data_solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('pendente', 'aprovada', 'rejeitada') DEFAULT 'pendente',
-    FOREIGN KEY (id_aluno) REFERENCES aluno(id_aluno) ON DELETE CASCADE,
-    FOREIGN KEY (id_turma) REFERENCES turma(id_turma) ON DELETE CASCADE
+    status ENUM('pendente', 'aprovada', 'rejeitada') DEFAULT 'pendente'
 );
+
+ALTER TABLE solicitacao_vagas ADD FOREIGN KEY (id_aluno) REFERENCES aluno(id_aluno) ON DELETE CASCADE;
+
+ALTER TABLE solicitacao_vagas ADD FOREIGN KEY (id_turma) REFERENCES turma(id_turma) ON DELETE CASCADE;
 
 -- atividades/respostas dos alunos
 CREATE TABLE resposta_atividade (
@@ -194,14 +176,14 @@ CREATE TABLE resposta_atividade (
     resposta TEXT,
     arquivo_url VARCHAR(500),
     data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    data_limite DATE,
-    FOREIGN KEY (id_aluno) REFERENCES aluno(id_aluno) ON DELETE CASCADE,
-    FOREIGN KEY (id_avaliacao) REFERENCES avaliacao(id_avaliacao) ON DELETE CASCADE
+    data_limite DATE
 );
 
+ALTER TABLE resposta_atividade ADD FOREIGN KEY (id_aluno) REFERENCES aluno(id_aluno) ON DELETE CASCADE;
+
+ALTER TABLE resposta_atividade ADD FOREIGN KEY (id_avaliacao) REFERENCES avaliacao(id_avaliacao) ON DELETE CASCADE;
+
 -- indexação
-CREATE INDEX idx_usuario_email ON usuario(email);
-CREATE INDEX idx_usuario_tipo ON usuario(tipo);
 CREATE INDEX idx_turma_curso ON turma(id_curso);
 CREATE INDEX idx_turma_professor ON turma(id_professor);
 CREATE INDEX idx_matricula_aluno ON matricula(id_aluno);
