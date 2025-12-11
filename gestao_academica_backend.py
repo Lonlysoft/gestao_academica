@@ -198,8 +198,8 @@ def editar_usuario_admin(admin, email_usuario):
 						print("Email alterado com sucesso!")
 			
 			elif opcao == "3":
-				nova_senha = getpass.getpass("Nova senha: ")
-				confirmar_senha = getpass.getpass("Confirmar senha: ")
+				nova_senha = input("Nova senha: ")
+				confirmar_senha = input("Confirmar senha: ")
 				
 				if nova_senha and nova_senha == confirmar_senha:
 					update_query = f"UPDATE usuario SET senha = '{nova_senha}' WHERE id_usuario = {id_usuario}"
@@ -359,8 +359,8 @@ def editar_usuario_professor(professor):
 						print("Email alterado com sucesso!")
 			
 			elif opcao == "3":
-				nova_senha = getpass.getpass("Nova senha: ")
-				confirmar_senha = getpass.getpass("Confirmar senha: ")
+				nova_senha = input("Nova senha: ")
+				confirmar_senha = input("Confirmar senha: ")
 				
 				if nova_senha and nova_senha == confirmar_senha:
 					update_query = f"UPDATE usuario SET senha = '{nova_senha}' WHERE id_usuario = {professor.id}"
@@ -448,8 +448,8 @@ def editar_usuario_aluno(aluno):
 						print("Email alterado com sucesso!")
 			
 			elif opcao == "3":
-				nova_senha = getpass.getpass("Nova senha: ")
-				confirmar_senha = getpass.getpass("Confirmar senha: ")
+				nova_senha = input("Nova senha: ")
+				confirmar_senha = input("Confirmar senha: ")
 				
 				if nova_senha and nova_senha == confirmar_senha:
 					update_query = f"UPDATE usuario SET senha = '{nova_senha}' WHERE id_usuario = {aluno.id}"
