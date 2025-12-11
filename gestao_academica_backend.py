@@ -461,7 +461,7 @@ def editar_usuario_aluno(aluno):
 			
 			elif opcao == "4":
 				# Visualizar dados do aluno
-				query = f"""SELECT u.nome, u.email, a.ra, a.data_ingresso, a.status,COUNT(DISTINCT m.id_turma) as turmas_matriculadas, AVG(n.valor_nota) as media_geral FROM usuario u LEFT JOIN aluno a ON u.id_usuario = a.id_aluno LEFT JOIN matricula m ON u.id_usuario = m.id_aluno AND m.status = 'matriculado' LEFT JOIN nota n ON u.id_usuario = n.id_aluno WHERE u.id_usuario = {aluno.id} GROUP BY u.id_usuario"""
+				query = f"""SELECT u.nome, u.email, a.registro, a.data_ingresso, a.status,COUNT(DISTINCT m.id_turma) as turmas_matriculadas, AVG(n.valor_nota) as media_geral FROM usuario u LEFT JOIN aluno a ON u.id_usuario = a.id_aluno LEFT JOIN matricula m ON u.id_usuario = m.id_aluno AND m.status = 'matriculado' LEFT JOIN nota n ON u.id_usuario = n.id_aluno WHERE u.id_usuario = {aluno.id} GROUP BY u.id_usuario"""
 				
 				cursor.execute(query)
 				result = cursor.fetchone()
@@ -776,6 +776,123 @@ def matricular_turma(aluno):
 		
 	except Error as e:
 		print(f"Erro: {e}")
+		
+		
+def ver_turmas_matriculadas(aluno):
+    print("\n=== MINHAS TURMAS MATRICULADAS ===")
+    
+    query = f"""SELECT t.id_turma, t.codigo_turma, c.nome as curso_nome, 
+               d.nome as disciplina_nome, u.nome as professor_nome,
+               t.periodo, t.horario, m.status as status_matricula,
+               m.data_matricula,
+               t.vagas_ocupadas, t.vagas_totais,
+               COUNT(DISTINCT a.id_avaliacao) as total_avaliacoes,
+               COUNT(DISTINCT mat.id_material) as total_materiais
+               FROM matricula m 
+               JOIN turma t ON m.id_turma = t.id_turma
+               JOIN curso c ON t.id_curso = c.id_curso
+               JOIN disciplina d ON t.id_disciplina = d.id_disciplina
+               JOIN usuario u ON t.id_professor = u.id_usuario
+               LEFT JOIN avaliacao a ON t.id_turma = a.id_turma
+               LEFT JOIN material_aula mat ON t.id_turma = mat.id_turma
+               WHERE m.id_aluno = {aluno.id} AND m.status = 'matriculado'
+               GROUP BY t.id_turma, t.codigo_turma, c.nome, d.nome, u.nome,
+                        t.periodo, t.horario, m.status, m.data_matricula, t.vagas_ocupadas, t.vagas_totais
+               ORDER BY t.periodo, c.nome"""
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        turmas = cursor.fetchall()
+        
+        if turmas:
+            print(f"--- Você está matriculado em {len(turmas)} turma(s):")
+            
+            for i, turma in enumerate(turmas, 1):
+                ocupacao = (turma[10] / turma[11] * 100) if turma[11] > 0 else 0
+                print(f"\n{i}. {turma[1]} - {turma[2]}")
+                print(f"   Disciplina: {turma[3]}")
+                print(f"   Professor: {turma[4]}")
+                print(f"   Perí­odo: {turma[5]} | Horário: {turma[6]}")
+                print(f"   Matriculado desde: {turma[8]}")
+                print(f"   Status: {turma[7]} | Prioridade: {turma[9]}")
+                print(f"   Vagas: {turma[10]}/{turma[11]} ({ocupacao:.1f}% ocupada)")
+                print(f"   Recursos: {turma[12]} avaliações | {turma[13]} materiais")
+        else:
+            print("Você não está matriculado em nenhuma turma no momento.")
+            print("Use a opção 'Matricular em turma' para se matricular.")
+        
+        cursor.close()
+        
+        # Opção para ver detalhes de uma turma especí­fica
+        if turmas:
+            opcao = input("\nDigite o número da turma para ver detalhes (ou 0 para voltar): ")
+            if opcao.isdigit():
+                idx = int(opcao) - 1
+                if 0 <= idx < len(turmas):
+                    ver_detalhes_turma(aluno, turmas[idx][0])  # id_turma
+                elif idx != -1:
+                    print("Número inválido!")
+        
+    except Error as e:
+        print(f"Erro ao buscar turmas: {e}")
+
+def ver_detalhes_turma(aluno, id_turma):
+    query = f"""SELECT t.codigo_turma, c.nome as curso_nome, 
+               d.nome as disciplina_nome, u.nome as professor_nome,
+               t.periodo, t.horario, t.local,
+               d.carga_horaria, d.ementa,
+               m.status as status_matricula, m.data_matricula,
+               AVG(n.valor_nota) as minha_media
+               FROM turma t 
+               JOIN curso c ON t.id_curso = c.id_curso
+               JOIN disciplina d ON t.id_disciplina = d.id_disciplina
+               JOIN usuario u ON t.id_professor = u.id_usuario
+               JOIN matricula m ON t.id_turma = m.id_turma AND m.id_aluno = {aluno.id}
+               LEFT JOIN avaliacao av ON t.id_turma = av.id_turma
+               LEFT JOIN nota n ON av.id_avaliacao = n.id_avaliacao AND n.id_aluno = {aluno.id}
+               WHERE t.id_turma = {id_turma}
+               GROUP BY t.id_turma, t.codigo_turma, c.nome, d.nome, u.nome,
+                        t.periodo, t.horario, t.local, d.carga_horaria, d.ementa,
+                        m.status, m.data_matricula"""
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        turma = cursor.fetchone()
+        
+        if turma:
+            print(f"– DETALHES DA TURMA {turma[0]}")
+            print(f"Curso: {turma[1]}")
+            print(f"Disciplina: {turma[2]}")
+            print(f"Professor: {turma[3]}")
+            print(f"Perí­odo: {turma[4]} | Horário: {turma[5]}")
+            print(f"Local: {turma[6] if turma[6] else 'Não informado'}")
+            print(f"Carga horária: {turma[7]} horas")
+            print(f"Ementa: {turma[8] if turma[8] else 'Não disponível'}")
+            print(f"Sua matrícula: {turma[9]} desde {turma[10]}")
+            print(f"Sua média atual: {turma[11]:.2f if turma[11] else 'N/A'}")
+            
+            # Menu de opções para esta turma
+            while True:
+                print("\n--- OPÇÕES PARA ESTA TURMA ---")
+                print("1. Ver materiais de aula")
+                print("2. Ver avaliações")
+                print("3. Voltar")
+                escolha = input("Escolha: ")
+                
+                if escolha == "1":
+                    acessar_materiais_turma(aluno, id_turma)
+                elif escolha == "2":
+                    acessar_avaliacoes_turma(aluno, id_turma)
+                elif escolha == "3":
+                    break
+                else:
+                    print("Opção inválida!")
+        
+        cursor.close()
+    except Error as e:
+        print(f"Erro ao buscar detalhes: {e}")
 
 def visualizar_notas(aluno):
 	print("\n----- MINHAS NOTAS -----")
@@ -798,67 +915,6 @@ def visualizar_notas(aluno):
 		cursor.close()
 	except Error as e:
 		print(f"Erro: {e}")
-
-def ver_turmas_matriculadas(aluno):
-    """Mostra as turmas que o aluno está matriculado"""
-    print("\n=== MINHAS TURMAS MATRICULADAS ===")
-    
-    query = f"""SELECT t.id_turma, t.codigo_turma, c.nome as curso_nome, 
-               d.nome as disciplina_nome, u.nome as professor_nome,
-               t.periodo, t.horario, m.status as status_matricula,
-               m.data_matricula, m.prioridade,
-               t.vagas_ocupadas, t.vagas_totais,
-               COUNT(DISTINCT a.id_avaliacao) as total_avaliacoes,
-               COUNT(DISTINCT mat.id_material) as total_materiais
-               FROM matricula m 
-               JOIN turma t ON m.id_turma = t.id_turma
-               JOIN curso c ON t.id_curso = c.id_curso
-               JOIN disciplina d ON t.id_disciplina = d.id_disciplina
-               JOIN usuario u ON t.id_professor = u.id_usuario
-               LEFT JOIN avaliacao a ON t.id_turma = a.id_turma
-               LEFT JOIN material_aula mat ON t.id_turma = mat.id_turma
-               WHERE m.id_aluno = {aluno.id} AND m.status = 'matriculado'
-               GROUP BY t.id_turma, t.codigo_turma, c.nome, d.nome, u.nome,
-                        t.periodo, t.horario, m.status, m.data_matricula, 
-                        m.prioridade, t.vagas_ocupadas, t.vagas_totais
-               ORDER BY t.periodo, c.nome"""
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute(query)
-        turmas = cursor.fetchall()
-        
-        if turmas:
-            print(f"\n📚 Você está matriculado em {len(turmas)} turma(s):")
-            
-            for i, turma in enumerate(turmas, 1):
-                ocupacao = (turma[10] / turma[11] * 100) if turma[11] > 0 else 0
-                print(f"\n{i}. {turma[1]} - {turma[2]}")
-                print(f"   Disciplina: {turma[3]}")
-                print(f"   Professor: {turma[4]}")
-                print(f"   Período: {turma[5]} | Horário: {turma[6]}")
-                print(f"   Matriculado desde: {turma[8]}")
-                print(f"   Status: {turma[7]} | Prioridade: {turma[9]}")
-                print(f"   Vagas: {turma[10]}/{turma[11]} ({ocupacao:.1f}% ocupada)")
-                print(f"   Recursos: {turma[12]} avaliações | {turma[13]} materiais")
-        else:
-            print("Você não está matriculado em nenhuma turma no momento.")
-            print("Use a opção 'Matricular em turma' para se matricular.")
-        
-        cursor.close()
-        
-        # Opção para ver detalhes de uma turma específica
-        if turmas:
-            opcao = input("\nDigite o número da turma para ver detalhes (ou 0 para voltar): ")
-            if opcao.isdigit():
-                idx = int(opcao) - 1
-                if 0 <= idx < len(turmas):
-                    ver_detalhes_turma(aluno, turmas[idx][0])  # id_turma
-                elif idx != -1:
-                    print("Número inválido!")
-        
-    except Error as e:
-        print(f"Erro ao buscar turmas: {e}")
 
 def ver_detalhes_turma(aluno, id_turma):
     """Mostra detalhes específicos de uma turma"""
@@ -886,7 +942,7 @@ def ver_detalhes_turma(aluno, id_turma):
         turma = cursor.fetchone()
         
         if turma:
-            print(f"\n📖 DETALHES DA TURMA {turma[0]}")
+            print(f"\n DETALHES DA TURMA {turma[0]}")
             print(f"Curso: {turma[1]}")
             print(f"Disciplina: {turma[2]}")
             print(f"Professor: {turma[3]}")
@@ -939,7 +995,7 @@ def acessar_materiais_turma(aluno, id_turma):
         materiais = cursor.fetchall()
         
         if materiais:
-            print(f"\n📚 {len(materiais)} material(is) disponível(is):")
+            print(f"\n {len(materiais)} material(is) disponível(is):")
             
             for i, material in enumerate(materiais, 1):
                 print(f"\n{i}. {material[1]} ({material[2]})")
@@ -1032,7 +1088,7 @@ def acessar_avaliacoes_turma(aluno, id_turma):
         avaliacoes = cursor.fetchall()
         
         if avaliacoes:
-            print(f"\n📝 {len(avaliacoes)} avaliação(ões):")
+            print(f"\n {len(avaliacoes)} avaliação(ões):")
             
             hoje = datetime.now().date()
             
@@ -1041,16 +1097,16 @@ def acessar_avaliacoes_turma(aluno, id_turma):
                 data_limite = avaliacao[6]
                 
                 if avaliacao[10] == 0:  # Não liberada
-                    status = "🔒 Não liberada"
+                    status = "Não liberada"
                 elif data_limite and hoje > data_limite:
                     if avaliacao[7] is not None:
-                        status = f"📊 Nota: {avaliacao[7]:.1f}"
+                        status = f" Nota: {avaliacao[7]:.1f}"
                     else:
-                        status = "⏰ Prazo expirado"
+                        status = " Prazo expirado"
                 elif avaliacao[8] is not None:  # Já respondeu
                     status = f"✅ Respondida | Nota: {avaliacao[7]:.1f if avaliacao[7] else 'N/A'}"
                 else:
-                    status = "📝 Disponível para resposta"
+                    status = " Disponível para resposta"
                 
                 print(f"\n{i}. {avaliacao[1]} ({avaliacao[2]}) - Peso: {avaliacao[5]:.2f}")
                 print(f"   Data: {avaliacao[4]} | Limite: {data_limite if data_limite else 'Sem limite'}")
@@ -1074,7 +1130,6 @@ def acessar_avaliacoes_turma(aluno, id_turma):
         print(f"Erro ao buscar avaliações: {e}")
 
 def gerenciar_resposta_avaliacao(aluno, id_avaliacao, info_avaliacao):
-    """Gerencia as respostas do aluno para uma avaliação"""
     # Primeiro verificar se a avaliação está liberada
     if info_avaliacao[10] == 0:  # Não liberada
         print("Esta avaliação ainda não foi liberada pelo professor.")
@@ -1092,7 +1147,7 @@ def gerenciar_resposta_avaliacao(aluno, id_avaliacao, info_avaliacao):
     
     # Verificar se já respondeu
     if info_avaliacao[8] is not None:  # Já tem resposta
-        print(f"\n📄 AVALIAÇÃO: {info_avaliacao[1]}")
+        print(f"\n AVALIAÇÃO: {info_avaliacao[1]}")
         print(f"Você já respondeu esta avaliação.")
         if info_avaliacao[7] is not None:
             print(f"Sua nota: {info_avaliacao[7]:.1f}")
@@ -1103,7 +1158,7 @@ def gerenciar_resposta_avaliacao(aluno, id_avaliacao, info_avaliacao):
         return
     
     # Se chegou aqui, pode responder a avaliação
-    print(f"\n📝 RESPONDER AVALIAÇÃO: {info_avaliacao[1]}")
+    print(f"\n RESPONDER AVALIAÇÃO: {info_avaliacao[1]}")
     print(f"Tipo: {info_avaliacao[2]} | Peso: {info_avaliacao[5]:.2f}")
     if info_avaliacao[3]:
         print(f"Descrição: {info_avaliacao[3]}")
@@ -1218,6 +1273,7 @@ def ver_minhas_respostas(aluno, id_avaliacao):
         print(f"Erro ao buscar respostas: {e}")
 
 def ver_historico_cursos(aluno):
+    """Mostra o histórico de cursos já feitos pelo aluno"""
     print("\n=== MEU HISTÓRICO DE CURSOS ===")
     
     query = f"""SELECT c.id_curso, c.nome as curso_nome, 
@@ -1242,7 +1298,7 @@ def ver_historico_cursos(aluno):
         cursos = cursor.fetchall()
         
         if cursos:
-            print(f"\n📊 Você já cursou {len(cursos)} curso(s) diferentes:")
+            print(f"\n Você já cursou {len(cursos)} curso(s) diferentes:")
             
             total_horas = 0
             cursos_concluidos = 0
@@ -1250,17 +1306,92 @@ def ver_historico_cursos(aluno):
             for i, curso in enumerate(cursos, 1):
                 status = "✅ Concluído" if curso[7] else "📚 Cursando"
                 print(f"\n{i}. {curso[1]} - {status}")
-          
+                print(f"   Turmas cursadas: {curso[5] if curso[5] else 'Nenhuma'}")
+                print(f"   Período: {curso[3]} a {curso[4]}")
+                print(f"   Total de turmas: {curso[2]}")
+                if curso[6]:
+                    print(f"   Média no curso: {curso[6]:.2f}")
+                
+                # Buscar carga horária do curso
+                query_carga = f"SELECT carga_horaria_total FROM curso WHERE id_curso = {curso[0]}"
+                cursor.execute(query_carga)
+                carga = cursor.fetchone()
+                
+                if carga and carga[0]:
+                    total_horas += carga[0]
+                    print(f"   Carga horária: {carga[0]} horas")
+                
+                if curso[7]:
+                    cursos_concluidos += 1
+                
+                # Mostrar disciplinas do curso que o aluno fez
+                query_disciplinas = f"""SELECT DISTINCT d.nome, m.status,
+                                       AVG(n.valor_nota) as media_disciplina
+                                       FROM disciplina d 
+                                       JOIN turma t ON d.id_disciplina = t.id_disciplina
+                                       JOIN matricula m ON t.id_turma = m.id_turma
+                                       LEFT JOIN avaliacao av ON t.id_turma = av.id_turma
+                                       LEFT JOIN nota n ON av.id_avaliacao = n.id_avaliacao AND n.id_aluno = {aluno.id}
+                                       WHERE m.id_aluno = {aluno.id} AND t.id_curso = {curso[0]}
+                                       GROUP BY d.id_disciplina, d.nome, m.status
+                                       HAVING COUNT(DISTINCT t.id_turma) > 0"""
+                
+                cursor.execute(query_disciplinas)
+                disciplinas = cursor.fetchall()
+                
+                if disciplinas:
+                    print(f"   Disciplinas cursadas ({len(disciplinas)}):")
+                    for j, disciplina in enumerate(disciplinas, 1):
+                        nota = f" | Média: {disciplina[2]:.2f}" if disciplina[2] else ""
+                        print(f"     {j}. {disciplina[0]} - {disciplina[1]}{nota}")
+            
+            # Estatísticas gerais
+            print("\n" + "="*50)
+            print(" RESUMO DO HISTÓRICO:")
+            print(f"Total de cursos diferentes: {len(cursos)}")
+            print(f"Cursos concluídos: {cursos_concluidos}")
+            print(f"Cursos em andamento: {len(cursos) - cursos_concluidos}")
+            print(f"Total de horas cursadas: {total_horas} horas")
+            
+            # Média geral
+            query_media_geral = f"""SELECT AVG(n.valor_nota) 
+                                   FROM nota n 
+                                   JOIN avaliacao av ON n.id_avaliacao = av.id_avaliacao
+                                   JOIN turma t ON av.id_turma = t.id_turma
+                                   JOIN matricula m ON t.id_turma = m.id_turma
+                                   WHERE n.id_aluno = {aluno.id} AND m.status IN ('matriculado', 'concluido', 'aprovado')"""
+            
+            cursor.execute(query_media_geral)
+            media_geral = cursor.fetchone()
+            
+            if media_geral[0]:
+                print(f"Média geral: {media_geral[0]:.2f}")
+            
+            print("\n PROGRESSO ACADÊMICO:")
+            
+            
+            query_total_cursos = "SELECT COUNT(DISTINCT id_curso) FROM curso WHERE ativo = 1"
+            cursor.execute(query_total_cursos)
+            total_cursos_sistema = cursor.fetchone()[0]
+            
+            if total_cursos_sistema > 0:
+                percentual = (len(cursos) / total_cursos_sistema) * 100
+                print(f"Cursou {len(cursos)} de {total_cursos_sistema} cursos disponíveis ({percentual:.1f}%)")
+            
+        else:
+            print("Você ainda não tem histórico de cursos.")
+            print("Matricule-se em turmas para começar a construir seu histórico!")
+        
+        cursor.close()
+        
+    except Error as e:
+        print(f"Erro ao buscar histórico: {e}")
 
 # Funções de Relatórios
 def relatorio_alunos_por_turma():
 	print("\n----- ALUNOS POR TURMA -----")
 	
-	query = """SELECT c.nome, t.codigo_turma, COUNT(m.id_matricula) as total_alunos 
-			   FROM curso c JOIN turma t ON c.id_curso = t.id_curso 
-			   JOIN matricula m ON t.id_turma = m.id_turma 
-			   WHERE m.status = 'matriculado' 
-			   GROUP BY c.nome, t.codigo_turma"""
+	query = """SELECT c.nome, t.codigo_turma, COUNT(m.id_matricula) as total_alunos FROM curso c JOIN turma t ON c.id_curso = t.id_curso JOIN matricula m ON t.id_turma = m.id_turma WHERE m.status = 'matriculado' GROUP BY c.nome, t.codigo_turma"""
 	
 	try:
 		cursor = conn.cursor()
@@ -1323,7 +1454,7 @@ def identificar_professores_alunos():
 	print("\n----- PROFESSORES QUE TAMBÉM SÃO ALUNOS -----")
 	
 	query = """SELECT u.id_usuario, u.nome, u.email, 
-			   p.especialidade, a.ra, 
+			   p.especialidade, a.registro, 
 			   COUNT(DISTINCT m.id_turma) as turmas_como_aluno 
 			   FROM usuario u 
 			   JOIN professor p ON u.id_usuario = p.id_professor 
@@ -1359,7 +1490,7 @@ def identificar_aluno_mais_cursos():
     """Identifica qual aluno fez mais cursos"""
     print("\n--- ALUNO COM MAIS CURSOS ---")
     
-    query = """SELECT u.id_usuario, u.nome, a.ra, 
+    query = """SELECT u.id_usuario, u.nome, a.registro, 
                COUNT(DISTINCT c.id_curso) as total_cursos
                FROM usuario u 
                JOIN aluno a ON u.id_usuario = a.id_aluno
@@ -1367,7 +1498,7 @@ def identificar_aluno_mais_cursos():
                JOIN turma t ON m.id_turma = t.id_turma
                JOIN curso c ON t.id_curso = c.id_curso
                WHERE m.status IN ('matriculado', 'concluido', 'aprovado')
-               GROUP BY u.id_usuario, u.nome, a.ra
+               GROUP BY u.id_usuario, u.nome, a.registro
                ORDER BY total_cursos DESC, u.nome
                LIMIT 1"""
     
@@ -1722,24 +1853,21 @@ def menu_professor_aluno(usuario):
 def menu_aluno(aluno):
     """Menu do aluno com todas as funcionalidades"""
     while True:
-        print(f"\n=== SISTEMA DE GESTÃO ACADÊMICA - ALUNO ===")
-        print(f"Olá, {aluno.nome}!")
-        
+        print("\n=== SISTEMA DE GESTÃO ACADÊMICA - ALUNO ===")
         print("\n--- MATRÍCULAS E CURSOS ---")
-        print("1. Matricular em nova turma")
-        print("2. Ver minhas turmas matriculadas")  # NOVA OPÇÃO
+        print("1. Matricular em turma")
+        print("2. Ver turmas matriculadas")  # NOVA OPÇÃO
         print("3. Ver histórico de cursos")  # NOVA OPÇÃO
         
-        print("\n--- ESTUDOS E AVALIAÇÕES ---")
-        print("4. Acessar materiais e avaliações")  # NOVA OPÇÃO
-        print("5. Visualizar minhas notas")
-        print("6. Ver minhas respostas/entregas")  # NOVA OPÇÃO
+        print("\n--- AVALIAÇÕES E NOTAS ---")
+        print("4. Visualizar minhas notas")
+        print("5. Acessar avaliações e materiais")  # NOVA OPÇÃO
         
-        print("\n--- CONTA ---")
-        print("7. Editar meus dados")
+        print("\n--- MEUS DADOS ---")
+        print("6. Editar meus dados")
         
         print("\n--- SAIR ---")
-        print("8. Sair")
+        print("7. Sair")
         
         opcao = input("\nEscolha: ")
 
@@ -1749,48 +1877,23 @@ def menu_aluno(aluno):
             ver_turmas_matriculadas(aluno)
         elif opcao == "3":  # NOVA OPÇÃO
             ver_historico_cursos(aluno)
-        elif opcao == "4":  # NOVA OPÇÃO
-            ver_materiais_avaliacoes(aluno)
-        elif opcao == "5":
+        elif opcao == "4":
             visualizar_notas(aluno)
-        elif opcao == "6":  # NOVA OPÇÃO
-            # Esta função já é chamada dentro de ver_materiais_avaliacoes,
-            # mas podemos criar um acesso direto também
-            id_turma = input("Digite o ID da turma (ou Enter para listar todas): ").strip()
-            if id_turma and id_turma.isdigit():
-                gerenciar_minhas_respostas(int(id_turma), aluno.id)
-            else:
-                # Primeiro listar as turmas
-                query = f"SELECT id_turma, codigo_turma FROM matricula JOIN turma ON matricula.id_turma = turma.id_turma WHERE id_aluno = {aluno.id} AND status IN ('matriculado', 'cursando')"
-                try:
-                    cursor = conn.cursor()
-                    cursor.execute(query)
-                    turmas = cursor.fetchall()
-                    cursor.close()
-                    
-                    if turmas:
-                        print("Suas turmas:")
-                        for turma in turmas:
-                            print(f"ID: {turma[0]} - Código: {turma[1]}")
-                        
-                        escolha = input("Digite o ID da turma: ")
-                        if escolha.isdigit():
-                            gerenciar_minhas_respostas(int(escolha), aluno.id)
-                    else:
-                        print("Você não está matriculado em nenhuma turma.")
-                except Error as e:
-                    print(f"Erro: {e}")
-        elif opcao == "7":
+        elif opcao == "5":  # NOVA OPÇÃO
+            # Primeiro mostra as turmas, depois permite acessar uma específica
+            ver_turmas_matriculadas(aluno)
+        elif opcao == "6":
             menu_editar_usuario(aluno)
-        elif opcao == "8":
+        elif opcao == "7":
             print("Saindo...")
             break
         else:
             print("Opção inválida!")
         
-        if opcao != "8":
+        if opcao != "7":
             pressione_para_continuar()
-
+            
+            
 # ---------------------------
 
 def main():
